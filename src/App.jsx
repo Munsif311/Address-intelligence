@@ -39,15 +39,35 @@ function getSavedTheme() {
 async function readJsonResponse(response) {
   const contentType = response.headers.get("content-type") || "";
   const text = await response.text();
-  if (!contentType.toLowerCase().includes("application/json")) {
-    const message = text.trim().slice(0, 240);
-    throw new Error(message || "The server returned an unexpected response.");
+  const isJson = /^application\/(?:[\w.-]+\+)?json(?:\s*;|$)/i.test(contentType);
+  const statusMessage = `Request failed with HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}.`;
+
+  if (!text.trim()) {
+    throw new Error(response.ok
+      ? "The server returned an empty response instead of JSON."
+      : `${statusMessage} The response body was empty.`);
   }
+  if (!isJson) {
+    const body = text.trim();
+    const detail = body.startsWith("<")
+      ? "The server returned an HTML page instead of JSON."
+      : `The server returned non-JSON text: ${body.slice(0, 160)}`;
+    throw new Error(`${response.ok ? "Unexpected server response." : statusMessage} ${detail}`);
+  }
+
+  let payload;
   try {
-    return JSON.parse(text);
+    payload = JSON.parse(text);
   } catch {
-    throw new Error("The server returned an invalid JSON response.");
+    throw new Error(response.ok
+      ? "The server returned an invalid JSON response."
+      : `${statusMessage} The error response was not valid JSON.`);
   }
+
+  if (!response.ok) {
+    throw new Error(typeof payload?.error === "string" ? payload.error : statusMessage);
+  }
+  return payload;
 }
 
 async function postJson(path, body, signal) {
@@ -57,16 +77,12 @@ async function postJson(path, body, signal) {
     body: JSON.stringify(body),
     signal
   });
-  const payload = await readJsonResponse(response);
-  if (!response.ok) throw new Error(payload?.error || "The request could not be completed.");
-  return payload;
+  return readJsonResponse(response);
 }
 
 async function getJson(path, signal) {
   const response = await fetch(`${API}${path}`, { signal });
-  const payload = await readJsonResponse(response);
-  if (!response.ok) throw new Error(payload?.error || "The request could not be completed.");
-  return payload;
+  return readJsonResponse(response);
 }
 
 function Icon({ name, size = 18 }) {
@@ -140,9 +156,10 @@ export default function App() {
   const [parseLoading, setParseLoading] = useState(false);
   const [parseError, setParseError] = useState("");
   const [activeTab, setActiveTab] = useState("postcode");
-  const [analytics, setAnalytics] = useState({ totalSearches: 0, validPostcodes: 0, invalidPostcodes: 0, incompleteAddresses: 0, apiErrors: 0 });
-  const [history, setHistory] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [history, setHistory] = useState(null);
   const [dashboardError, setDashboardError] = useState("");
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [toast, setToast] = useState("");
   const [themeMode, setThemeMode] = useState(getSavedTheme);
   const lookupController = useRef(null);
@@ -169,17 +186,20 @@ export default function App() {
   }, [themeMode]);
 
   const refreshDashboard = useCallback(async () => {
-    try {
-      const [metrics, recent] = await Promise.all([
-        getJson("/analytics"),
-        getJson("/search-history")
-      ]);
-      setAnalytics(metrics);
-      setHistory(recent.history || []);
-      setDashboardError("");
-    } catch (error) {
-      setDashboardError(`Dashboard summary unavailable: ${error.message}`);
+    const [metricsResult, historyResult] = await Promise.allSettled([
+      getJson("/analytics"),
+      getJson("/search-history")
+    ]);
+    const errors = [];
+    if (metricsResult.status === "fulfilled") setAnalytics(metricsResult.value);
+    else errors.push(`Analytics unavailable: ${metricsResult.reason.message}`);
+    if (historyResult.status === "fulfilled" && Array.isArray(historyResult.value?.history)) {
+      setHistory(historyResult.value.history);
+    } else {
+      errors.push(`Search history unavailable: ${historyResult.status === "rejected" ? historyResult.reason.message : "The server returned an invalid response."}`);
     }
+    setDashboardError(errors.length ? `Dashboard summary unavailable: ${errors.join(" ")}` : "");
+    setDashboardLoading(false);
   }, []);
 
   useEffect(() => { refreshDashboard(); }, [refreshDashboard]);
@@ -296,8 +316,8 @@ export default function App() {
     setLookupLoading(false);
   };
 
-  const validForMetric = analytics.validPostcodes;
-  const invalidForMetric = analytics.invalidPostcodes;
+  const validForMetric = analytics?.validPostcodes ?? "—";
+  const invalidForMetric = analytics?.invalidPostcodes ?? "—";
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -340,11 +360,11 @@ export default function App() {
         </section>
 
         <section className="metrics-grid" aria-label="Search analytics">
-          <MetricCard title="Total searches" value={analytics.totalSearches} icon="search" tone="blue" subtitle="Since service started" />
+          <MetricCard title="Total searches" value={analytics?.totalSearches ?? "—"} icon="search" tone="blue" subtitle="Since service started" />
           <MetricCard title="Valid postcodes" value={validForMetric} icon="check" tone="green" subtitle="Confirmed by Postcodes.io" />
           <MetricCard title="Invalid postcodes" value={invalidForMetric} icon="pin" tone="amber" subtitle="Need another look" />
-          <MetricCard title="Incomplete addresses" value={analytics.incompleteAddresses} icon="layers" tone="violet" subtitle="Missing key details" />
-          <MetricCard title="API errors" value={analytics.apiErrors} icon="shield" tone="amber" subtitle="External service issues" />
+          <MetricCard title="Incomplete addresses" value={analytics?.incompleteAddresses ?? "—"} icon="layers" tone="violet" subtitle="Missing key details" />
+          <MetricCard title="API errors" value={analytics?.apiErrors ?? "—"} icon="shield" tone="amber" subtitle="External service issues" />
         </section>
         {dashboardError && <p className="dashboard-error">{dashboardError}</p>}
 
@@ -471,8 +491,9 @@ export default function App() {
             </section>
 
             <section className="panel activity-panel">
-              <div className="activity-heading"><div><h3>Recent searches</h3><p>Your latest postcode lookups</p></div><span className="history-count">{history.length}</span></div>
-              {history.length ? <div className="history-list">{history.slice(0, 5).map((item, index) => <button key={`${item.postcode}-${item.searchedAt}-${index}`} className="history-item" onClick={() => { setActiveTab("postcode"); setPostcode(item.postcode); setLookup(null); }}>
+              <div className="activity-heading"><div><h3>Recent searches</h3><p>Your latest postcode lookups</p></div><span className="history-count">{history?.length ?? "—"}</span></div>
+              {history === null ? <div className="empty-history"><div><Icon name="clock" size={19} /></div><strong>{dashboardLoading ? "Loading recent searches…" : "Search history unavailable"}</strong></div>
+                : history.length ? <div className="history-list">{history.slice(0, 5).map((item, index) => <button key={`${item.postcode}-${item.searchedAt}-${index}`} className="history-item" onClick={() => { setActiveTab("postcode"); setPostcode(item.postcode); setLookup(null); }}>
                 <div className="history-pin"><Icon name="pin" size={15} /></div><div className="history-main"><strong>{item.postcode}</strong><small>{new Date(item.searchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></div><StatusBadge status={item.status} />
               </button>)}</div> : <div className="empty-history"><div><Icon name="clock" size={19} /></div><strong>No searches yet</strong><span>Your recent postcode searches will appear here.</span></div>}
               <div className="privacy-note"><span className="privacy-lock">⌑</span> Recent postcode history is kept in memory only.</div>
