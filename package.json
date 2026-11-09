@@ -13,7 +13,7 @@
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
     "dev:client": "vite",
-    "build": "vite build",
+    "build": "node ./node_modules/vite/bin/vite.js build",
     "start": "node --env-file-if-exists=.env server/index.js",
     "test": "node --test tests/services.test.js tests/providers.test.js tests/api.test.js",
     "test:integration": "node --test tests/*.integration.test.js"
