@@ -36,6 +36,20 @@ function getSavedTheme() {
   }
 }
 
+async function readJsonResponse(response) {
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  if (!contentType.toLowerCase().includes("application/json")) {
+    const message = text.trim().slice(0, 240);
+    throw new Error(message || "The server returned an unexpected response.");
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("The server returned an invalid JSON response.");
+  }
+}
+
 async function postJson(path, body, signal) {
   const response = await fetch(`${API}${path}`, {
     method: "POST",
@@ -43,8 +57,15 @@ async function postJson(path, body, signal) {
     body: JSON.stringify(body),
     signal
   });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "The request could not be completed.");
+  const payload = await readJsonResponse(response);
+  if (!response.ok) throw new Error(payload?.error || "The request could not be completed.");
+  return payload;
+}
+
+async function getJson(path, signal) {
+  const response = await fetch(`${API}${path}`, { signal });
+  const payload = await readJsonResponse(response);
+  if (!response.ok) throw new Error(payload?.error || "The request could not be completed.");
   return payload;
 }
 
@@ -150,8 +171,8 @@ export default function App() {
   const refreshDashboard = useCallback(async () => {
     try {
       const [metrics, recent] = await Promise.all([
-        fetch(`${API}/analytics`).then((response) => response.json()),
-        fetch(`${API}/search-history`).then((response) => response.json())
+        getJson("/analytics"),
+        getJson("/search-history")
       ]);
       setAnalytics(metrics);
       setHistory(recent.history || []);
