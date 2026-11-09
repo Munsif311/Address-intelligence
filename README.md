@@ -52,7 +52,7 @@ OS Names searches Ordnance Survey's free OS Open Names data. Create an OS Data H
 OS_NAMES_API_KEY=your-os-names-api-key
 ```
 
-Alternatively, copy `.env.example` to `.env` and add the key. The backend loads `.env` at startup; restart it after adding or changing the key. Or set the variable in PowerShell before starting the app:
+Create a `.env` file in the project root and add the key. The backend loads `.env` at startup; restart it after adding or changing the key. Or set the variable in PowerShell before starting the app:
 
 ```powershell
 $env:OS_NAMES_API_KEY = "your-os-names-api-key"
@@ -61,8 +61,7 @@ npm run dev
 
 Configure `OS_NAMES_API_KEY` in the deployment platform's secret manager in production. Never put it in React/Vite variables, source control, browser code, or logs. Without a key, postcode validation still works and the response states that OS Names location search is not configured.
 
-Address results distinguish postcode validation from street/place matching. The `server/services/providers/osPlaces.js` adapter is retained for a future property-level integration, but is not used by the free verification flow.
-
+Address results distinguish postcode validation from street/place matching using the free Postcodes.io and OS Names sources.
 ## REST API
 
 All routes return JSON. See [docs/API.md](docs/API.md) for request/response shapes and examples.
@@ -102,5 +101,8 @@ No database is required. Search counters and a bounded history of postcode searc
 - `server/services/address.js`: address parser and completeness rules.
 - `server/services/addressVerification.js`: postcode, road, and place comparison without property-match claims.
 - `server/services/providers/osNames.js`: OS Names API client, timeouts, caching, and response mapping.
-- `server/services/providers/osPlaces.js`: retained adapter for a future property-level integration; not used in the free flow.
 - `server/index.js`: versioned REST API and in-memory dashboard data.
+
+## Vercel deployment
+
+Deploy from the repository root so Vercel includes the Vite app and the `api/` function. `api/[...path].js` forwards API requests to the shared Express application. The production build uses `npm run build` and publishes `dist/`, while API routes are served as a Node.js function.

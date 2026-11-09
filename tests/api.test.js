@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { createServer } from "node:http";
 import test from "node:test";
-import app from "../server/app.js";
+import handler from "../api/[...path].js";
 
 test("API routes return JSON responses and preserve API 404 handling", async (t) => {
-  const server = app.listen(0, "127.0.0.1");
+  const server = createServer(handler);
+  server.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => new Promise((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());

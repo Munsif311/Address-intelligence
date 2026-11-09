@@ -1,25 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { searchOsPlaces } from "../server/services/providers/osPlaces.js";
 import { OsNamesProviderError, searchOsNames } from "../server/services/providers/osNames.js";
 import { verifyAddress } from "../server/services/addressVerification.js";
 import { parseAddressText } from "../server/services/address.js";
-
-const dundeeRecord = {
-  header: { dataset: "DPA" },
-  results: [{
-    DPA: {
-      UPRN: "100000000001",
-      ADDRESS: "2, BALMERINO ROAD, DUNDEE, DD4 8RN",
-      BUILDING_NUMBER: "2",
-      THOROUGHFARE_NAME: "BALMERINO ROAD",
-      POST_TOWN: "DUNDEE",
-      POSTCODE: "DD4 8RN",
-      COUNTRY_CODE_DESCRIPTION: "Scotland",
-      MATCH: 1
-    }
-  }]
-};
 
 const sampleAddress = {
   components: {
@@ -38,86 +21,6 @@ const osNamesResults = {
   ]
 };
 
-test("returns provider-not-configured without inventing an address match", async () => {
-  const result = await searchOsPlaces(sampleAddress.components, {
-    apiKey: "",
-    now: () => new Date("2026-11-06T12:00:00.000Z")
-  });
-  assert.equal(result.status, "PROVIDER_NOT_CONFIGURED");
-  assert.equal(result.propertyRecordMatched, undefined);
-  assert.equal(result.verifiedAt, "2026-11-06T12:00:00.000Z");
-});
-
-test("classifies an exact provider record by comparing every submitted component", async () => {
-  let requestUrl;
-  const result = await searchOsPlaces(sampleAddress.components, {
-    apiKey: "test-key",
-    now: () => new Date("2026-11-06T12:00:00.000Z"),
-    fetchImpl: async (url) => {
-      requestUrl = new URL(url);
-      return { ok: true, json: async () => dundeeRecord };
-    }
-  });
-
-  assert.equal(requestUrl.searchParams.get("query"), "2, BALMERINO ROAD, DUNDEE, DD4 8RN");
-  assert.equal(requestUrl.searchParams.get("key"), "test-key");
-  assert.equal(result.status, "EXACT_MATCH");
-  assert.equal(result.propertyRecordMatched, true);
-  assert.equal(result.candidates[0].componentMatches.country, true);
-  assert.equal(result.source, "Ordnance Survey OS Places API (DPA)");
-  assert.equal(result.verifiedAt, "2026-11-06T12:00:00.000Z");
-});
-
-test("does not claim an exact match when a provider returns a different house number", async () => {
-  const result = await searchOsPlaces(sampleAddress.components, {
-    apiKey: "test-key",
-    fetchImpl: async () => ({
-      ok: true,
-      json: async () => ({
-        ...dundeeRecord,
-        results: [{
-          DPA: {
-            ...dundeeRecord.results[0].DPA,
-            BUILDING_NUMBER: "4",
-            ADDRESS: "4, BALMERINO ROAD, DUNDEE, DD4 8RN"
-          }
-        }]
-      })
-    })
-  });
-  assert.equal(result.status, "PARTIAL_MATCH");
-  assert.equal(result.propertyRecordMatched, false);
-  assert.equal(result.candidates[0].componentMatches.building, false);
-});
-
-test("returns alternative and no-match statuses for non-exact provider results", async () => {
-  const alternative = await searchOsPlaces(sampleAddress.components, {
-    apiKey: "test-key",
-    fetchImpl: async () => ({
-      ok: true,
-      json: async () => ({
-        ...dundeeRecord,
-        results: [{
-          DPA: {
-            ...dundeeRecord.results[0].DPA,
-            POSTCODE: "DD4 9RN",
-            ADDRESS: "2, BALMERINO ROAD, DUNDEE, DD4 9RN"
-          }
-        }]
-      })
-    })
-  });
-  assert.equal(alternative.status, "ALTERNATIVE_MATCH");
-  assert.equal(alternative.propertyRecordMatched, false);
-
-  const none = await searchOsPlaces(sampleAddress.components, {
-    apiKey: "test-key",
-    fetchImpl: async () => ({ ok: true, json: async () => ({ results: [] }) })
-  });
-  assert.equal(none.status, "NO_MATCH");
-  assert.equal(none.propertyRecordMatched, false);
-  assert.match(none.explanation, /does not establish that the property does not exist/i);
-});
 
 test("does not send or verify recipient identity", async () => {
   const parsed = parseAddressText("Roberta Coats\n2 BALMERINO ROAD\nDUNDEE\nDD4 8RN\nUNITED KINGDOM");
