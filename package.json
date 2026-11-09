@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=20"
   },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  },
   "scripts": {
     "dev": "concurrently \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --env-file-if-exists=.env --watch server/index.js",
