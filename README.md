@@ -1,4 +1,6 @@
-# Data Direct Address Desk
+# Address-intelligence
+
+## Data Direct Address Desk
 
 A standalone UK postcode and address checking application for warehouse operations. The React interface uses a small Node.js REST API with Postcodes.io for postcode validation and the free Ordnance Survey OS Names API for road and place searches.
 
