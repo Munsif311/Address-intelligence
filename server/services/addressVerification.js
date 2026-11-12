@@ -151,7 +151,8 @@ export async function verifyAddress(input, {
     };
   }
 
-  if (!postcodeValidation.valid && postcodeValidation.status === "PROVIDER_ERROR") {
+  // Guard: postcode validator returned PROVIDER_ERROR (valid may be null or false)
+  if (postcodeValidation.status === "PROVIDER_ERROR") {
     return {
       ...common,
       status: "PROVIDER_ERROR",
@@ -160,6 +161,19 @@ export async function verifyAddress(input, {
       postcodeValidation,
       providerStatus: "PROVIDER_ERROR",
       explanation: postcodeValidation.explanation,
+      recommendation: "Retry the postcode check before processing the delivery."
+    };
+  }
+  // Guard: valid===null means the validator could not determine validity — stop here
+  if (postcodeValidation.valid == null) {
+    return {
+      ...common,
+      status: "PROVIDER_ERROR",
+      provider: "Postcodes.io",
+      source: "Postcodes.io",
+      postcodeValidation,
+      providerStatus: "PROVIDER_ERROR",
+      explanation: "Postcode validation returned an indeterminate result. Please try again.",
       recommendation: "Retry the postcode check before processing the delivery."
     };
   }

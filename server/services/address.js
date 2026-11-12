@@ -19,15 +19,20 @@ export function parseAddressText(value) {
   const withoutPostcode = lines
     .map((line) => line.replace(UK_POSTCODE_PATTERN, "").trim())
     .filter(Boolean);
+  // If the first line looks like an organisation name (no leading building number)
+  // but the second line does start with a building number, preserve the first line
+  // as `organisation` instead of discarding it silently.
+  let organisation = "";
   if (
     withoutPostcode.length >= 3
     && !/^\d+[A-Z]?(?:[-/]\d+[A-Z]?)?\b/i.test(withoutPostcode[0])
     && /^\d+[A-Z]?(?:[-/]\d+[A-Z]?)?\s+/i.test(withoutPostcode[1])
   ) {
-    withoutPostcode.shift();
+    organisation = withoutPostcode.shift();
   }
 
   const components = {
+    organisation,
     building: "",
     street: "",
     townCity: "",
@@ -87,7 +92,7 @@ export function checkAddressCompleteness(input) {
     : parseAddressText(input?.address);
 
   const components = Object.fromEntries(
-    ["building", "street", "townCity", "county", "postcode", "country"].map((key) => [
+    ["organisation", "building", "street", "townCity", "county", "postcode", "country"].map((key) => [
       key,
       typeof parsed.components[key] === "string" ? parsed.components[key].trim().replace(/\s+/g, " ") : ""
     ])
@@ -96,6 +101,7 @@ export function checkAddressCompleteness(input) {
   const missing = required.filter((key) => !components[key]);
   return {
     originalAddress: parsed.original || [
+      components.organisation,
       components.building,
       components.street,
       components.townCity,

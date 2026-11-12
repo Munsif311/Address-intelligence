@@ -16,13 +16,25 @@ export class PostcodesApiError extends Error {
 export function normalizePostcode(value) {
   if (typeof value !== "string") return "";
   const compact = value.trim().replace(/\s+/g, "").toUpperCase();
-  if (!compact || compact.length > 7 || !/^[A-Z0-9]+$/.test(compact)) return "";
+  // UK postcodes are at least 5 chars compact (e.g. M11AE) and at most 7 (e.g. SW1A1AA)
+  if (!compact || compact.length < 5 || compact.length > 7 || !/^[A-Z0-9]+$/.test(compact)) return "";
   return compact.length > 3
     ? `${compact.slice(0, -3)} ${compact.slice(-3)}`
     : compact;
 }
 
+let activeFetch = globalThis.fetch;
+
+function resetCacheIfFetchChanged() {
+  if (globalThis.fetch !== activeFetch) {
+    cache.clear();
+    pending.clear();
+    activeFetch = globalThis.fetch;
+  }
+}
+
 async function requestJson(path, { method = "GET", body } = {}) {
+  resetCacheIfFetchChanged();
   const key = `${method}:${path}:${body ? JSON.stringify(body) : ""}`;
   const cached = cache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;

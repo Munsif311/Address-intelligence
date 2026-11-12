@@ -135,7 +135,8 @@ app.post("/api/v1/address/verify", asyncRoute(async (req, res) => {
     components: req.body?.components
   });
   if (!completeness.complete) analytics.incompleteAddresses += 1;
-  if (result.status === "PROVIDER_ERROR") analytics.apiErrors += 1;
+  // apiErrors is counted once by the global error handler for 5xx responses.
+  // Provider errors returned as 200-with-status are tracked via addressVerification.status.
   res.json({
     ...completeness,
     postcodeValidation: result.postcodeValidation,

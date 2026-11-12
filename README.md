@@ -19,7 +19,7 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL shown in the terminal (normally `http://localhost:5173`). The frontend proxies `/api` requests to the Node API on port 3001.
+Open the Vite URL shown in the terminal (normally `http://localhost:5173`). The frontend proxies relative `/api` requests to the Express API on port 3000.
 
 For a production-style local run:
 
@@ -28,7 +28,7 @@ npm run build
 npm start
 ```
 
-Open `http://localhost:3001`. Set `PORT` to change the backend port.
+Express serves the production frontend and API together at `http://localhost:3000`. Set `PORT` to change the backend port. The backend loads the optional `OS_NAMES_API_KEY` from the root `.env` file; see `.env.example` for the template.
 
 ## Features
 
@@ -61,7 +61,7 @@ $env:OS_NAMES_API_KEY = "your-os-names-api-key"
 npm run dev
 ```
 
-Configure `OS_NAMES_API_KEY` in the deployment platform's secret manager in production. Never put it in React/Vite variables, source control, browser code, or logs. Without a key, postcode validation still works and the response states that OS Names location search is not configured.
+Never put the key in React/Vite variables, source control, browser code, or logs. Without a key, postcode validation still works and the response states that OS Names location search is not configured.
 
 Address results distinguish postcode validation from street/place matching using the free Postcodes.io and OS Names sources.
 ## REST API
@@ -99,12 +99,10 @@ No database is required. Search counters and a bounded history of postcode searc
 ## Architecture
 
 - `src/`: React user interface.
+- `server/app.js`: Express API routes and production frontend hosting.
+- `server/index.js`: local Node.js server entry point.
 - `server/services/postcodes.js`: Postcodes.io client, normalization, cache, and postcode response mapping.
 - `server/services/address.js`: address parser and completeness rules.
 - `server/services/addressVerification.js`: postcode, road, and place comparison without property-match claims.
 - `server/services/providers/osNames.js`: OS Names API client, timeouts, caching, and response mapping.
-- `server/index.js`: versioned REST API and in-memory dashboard data.
-
-## Vercel deployment
-
-Deploy from the repository root so Vercel includes the Vite app and the `api/` function. `api/[...path].js` forwards API requests to the shared Express application. The production build uses `npm run build` and publishes `dist/`, while API routes are served as a Node.js function.
+- `server/app.js`: versioned REST API and in-memory dashboard data.
